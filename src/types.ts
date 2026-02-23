@@ -1,6 +1,7 @@
 export enum GameStatus {
   START = 'START',
   PLAYING = 'PLAYING',
+  LEVEL_UP = 'LEVEL_UP',
   WON = 'WON',
   LOST = 'LOST'
 }

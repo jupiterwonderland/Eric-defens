@@ -10,7 +10,8 @@ import { GameStatus, Point, EnemyRocket, InterceptorMissile, Explosion, City, Ba
 
 const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 600;
-const WIN_SCORE = 1000;
+const POINTS_PER_LEVEL = 500;
+const BASE_ROCKET_SPEED = 0.0005;
 const EXPLOSION_MAX_RADIUS = 70; // Doubled from 35
 const EXPLOSION_SPEED = 0.02;
 const ROCKET_SPAWN_RATE = 0.0167; // 1 rocket per 1s (1 per sec) at 60fps
@@ -18,7 +19,9 @@ const ROCKET_SPAWN_RATE = 0.0167; // 1 rocket per 1s (1 per sec) at 60fps
 export default function App() {
   const [status, setStatus] = useState<GameStatus>(GameStatus.START);
   const [score, setScore] = useState(0);
+  const [level, setLevel] = useState(1);
   const [lang, setLang] = useState<'en' | 'zh'>('zh');
+  const [showLevelScreen, setShowLevelScreen] = useState(false);
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const requestRef = useRef<number>(null);
@@ -31,6 +34,8 @@ export default function App() {
     cities: [] as City[],
     batteries: [] as Battery[],
     score: 0,
+    level: 1,
+    levelScore: 0,
     lastTime: 0,
     spawnTimer: 0
   });
@@ -43,6 +48,9 @@ export default function App() {
       win: "Victory!",
       lose: "Defeat!",
       score: "Score",
+      level: "Level",
+      nextLevel: "Level Up!",
+      preparing: "Preparing Defenses...",
       ammo: "Ammo",
       objective: "Protect the cities from incoming rockets.",
       winMsg: "You have successfully defended the sector!",
@@ -56,6 +64,9 @@ export default function App() {
       win: "胜利！",
       lose: "失败！",
       score: "得分",
+      level: "关卡",
+      nextLevel: "进入下一关！",
+      preparing: "正在准备防御...",
       ammo: "弹药",
       objective: "保护城市免受火箭袭击。",
       winMsg: "你成功保卫了该区域！",
@@ -91,10 +102,13 @@ export default function App() {
       cities,
       batteries,
       score: 0,
+      level: 1,
+      levelScore: 0,
       lastTime: performance.now(),
       spawnTimer: 0
     };
     setScore(0);
+    setLevel(1);
   }, []);
 
   const spawnRocket = useCallback(() => {
@@ -105,6 +119,9 @@ export default function App() {
     
     const target = targets[Math.floor(Math.random() * targets.length)];
     
+    // Speed increases by 5% per level: speed = base * (1.05 ^ (level - 1))
+    const currentSpeed = BASE_ROCKET_SPEED * Math.pow(1.05, gameState.current.level - 1);
+
     const rocket: EnemyRocket = {
       id: `rocket-${Date.now()}-${Math.random()}`,
       x: startX,
@@ -114,7 +131,7 @@ export default function App() {
       targetX: target.x,
       targetY: target.y,
       progress: 0,
-      speed: 0.0005 + (gameState.current.score / 20000) // All rockets have the same speed, scaling with score
+      speed: currentSpeed
     };
     
     gameState.current.rockets.push(rocket);
@@ -226,6 +243,7 @@ export default function App() {
         if (dist < 10) { // Direct hit radius
           hitRocket = true;
           state.score += 20;
+          state.levelScore += 20;
           setScore(state.score);
           return false;
         }
@@ -267,6 +285,7 @@ export default function App() {
         const dist = Math.sqrt(Math.pow(rocket.x - exp.x, 2) + Math.pow(rocket.y - exp.y, 2));
         if (dist < exp.radius) {
           state.score += 20;
+          state.levelScore += 20;
           setScore(state.score);
           return false;
         }
@@ -276,11 +295,29 @@ export default function App() {
       return exp.radius > 0;
     });
 
+    // Check level up
+    if (state.levelScore >= POINTS_PER_LEVEL) {
+      state.level += 1;
+      state.levelScore = 0;
+      setLevel(state.level);
+      
+      // Replenish ammo on level up
+      state.batteries.forEach(bat => {
+        if (!bat.destroyed) {
+          bat.ammo = bat.maxAmmo;
+        }
+      });
+
+      // Pause and show level screen
+      setStatus(GameStatus.LEVEL_UP);
+      setTimeout(() => {
+        setStatus(GameStatus.PLAYING);
+      }, 2000);
+    }
+
     // Check game over
     if (state.batteries.every(b => b.destroyed)) {
       setStatus(GameStatus.LOST);
-    } else if (state.score >= WIN_SCORE) {
-      setStatus(GameStatus.WON);
     }
 
     draw();
@@ -295,9 +332,27 @@ export default function App() {
 
     const state = gameState.current;
 
-    // Clear
+    // Background Image
+    // We use a different seed for each level to get a different background
+    const bgSeed = 100 + state.level;
     ctx.fillStyle = '#0c0c14';
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    
+    // Draw a subtle grid or stars if no image
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < CANVAS_WIDTH; i += 50) {
+      ctx.beginPath();
+      ctx.moveTo(i, 0);
+      ctx.lineTo(i, CANVAS_HEIGHT);
+      ctx.stroke();
+    }
+    for (let i = 0; i < CANVAS_HEIGHT; i += 50) {
+      ctx.beginPath();
+      ctx.moveTo(0, i);
+      ctx.lineTo(CANVAS_WIDTH, i);
+      ctx.stroke();
+    }
 
     // Draw cities
     state.cities.forEach(city => {
@@ -310,6 +365,12 @@ export default function App() {
         ctx.beginPath();
         ctx.arc(city.x, city.y, 25, Math.PI, 0);
         ctx.stroke();
+        
+        // Shield glow
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = '#3b82f6';
+        ctx.stroke();
+        ctx.shadowBlur = 0;
       }
 
       ctx.fillStyle = '#3b82f6';
@@ -334,6 +395,12 @@ export default function App() {
           ctx.beginPath();
           ctx.arc(bat.x, bat.y, 35, Math.PI, 0);
           ctx.stroke();
+          
+          // Shield glow
+          ctx.shadowBlur = 10;
+          ctx.shadowColor = '#00ff9d';
+          ctx.stroke();
+          ctx.shadowBlur = 0;
         }
         ctx.fillStyle = '#00ff9d';
       }
@@ -354,28 +421,77 @@ export default function App() {
     });
 
     // Draw rockets
-    ctx.strokeStyle = '#ff3e3e';
-    ctx.lineWidth = 2; // Doubled from 1
     state.rockets.forEach(rocket => {
+      // Trail
+      ctx.strokeStyle = 'rgba(255, 62, 62, 0.3)';
+      ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(rocket.startX, rocket.startY);
       ctx.lineTo(rocket.x, rocket.y);
       ctx.stroke();
       
+      // Rocket Body
+      const angle = Math.atan2(rocket.targetY - rocket.startY, rocket.targetX - rocket.startX);
+      ctx.save();
+      ctx.translate(rocket.x, rocket.y);
+      ctx.rotate(angle + Math.PI / 2);
+      
+      // Flame
+      const flameHeight = 10 + Math.random() * 5;
+      ctx.fillStyle = '#ff9d00';
+      ctx.beginPath();
+      ctx.moveTo(-2, 0);
+      ctx.lineTo(0, flameHeight);
+      ctx.lineTo(2, 0);
+      ctx.fill();
+      
+      // Body
       ctx.fillStyle = '#ff3e3e';
       ctx.beginPath();
-      ctx.arc(rocket.x, rocket.y, 3, 0, Math.PI * 2);
+      ctx.moveTo(-3, 0);
+      ctx.lineTo(0, -10);
+      ctx.lineTo(3, 0);
+      ctx.closePath();
       ctx.fill();
+      
+      ctx.restore();
     });
 
     // Draw missiles
-    ctx.strokeStyle = '#00ff9d';
-    ctx.lineWidth = 2; // Doubled from 1
     state.missiles.forEach(missile => {
+      // Trail
+      ctx.strokeStyle = 'rgba(0, 255, 157, 0.4)';
+      ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(missile.startX, missile.startY);
       ctx.lineTo(missile.x, missile.y);
       ctx.stroke();
+      
+      // Missile Body
+      const angle = Math.atan2(missile.vy, missile.vx);
+      ctx.save();
+      ctx.translate(missile.x, missile.y);
+      ctx.rotate(angle + Math.PI / 2);
+      
+      // Blue flame
+      const flameHeight = 8 + Math.random() * 4;
+      ctx.fillStyle = '#00d4ff';
+      ctx.beginPath();
+      ctx.moveTo(-1.5, 0);
+      ctx.lineTo(0, flameHeight);
+      ctx.lineTo(1.5, 0);
+      ctx.fill();
+      
+      // Body
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.moveTo(-2, 0);
+      ctx.lineTo(0, -8);
+      ctx.lineTo(2, 0);
+      ctx.closePath();
+      ctx.fill();
+      
+      ctx.restore();
     });
 
     // Draw explosions
@@ -451,6 +567,10 @@ export default function App() {
         
         <div className="flex items-center gap-4">
           <div className="flex flex-col items-end">
+            <span className="text-[10px] uppercase tracking-widest text-emerald-400/60 font-mono">{t.level}</span>
+            <span className="text-2xl font-mono font-bold">{level}</span>
+          </div>
+          <div className="flex flex-col items-end">
             <span className="text-[10px] uppercase tracking-widest text-emerald-400/60 font-mono">{t.score}</span>
             <span className="text-2xl font-mono font-bold">{score.toString().padStart(5, '0')}</span>
           </div>
@@ -465,18 +585,47 @@ export default function App() {
 
       {/* Game Area */}
       <div className="relative w-full max-w-[800px] aspect-[4/3] bg-black rounded-2xl overflow-hidden border border-white/10 shadow-2xl">
+        {/* Background Image Layer */}
+        <div className="absolute inset-0 z-0 opacity-40">
+           <img 
+             src={`https://picsum.photos/seed/defense-level-${level}/800/600?blur=2`} 
+             alt="background" 
+             className="w-full h-full object-cover"
+             referrerPolicy="no-referrer"
+           />
+        </div>
+
         <canvas
           ref={canvasRef}
           width={CANVAS_WIDTH}
           height={CANVAS_HEIGHT}
           onMouseDown={handleCanvasClick}
           onTouchStart={handleCanvasClick}
-          className="w-full h-full cursor-crosshair"
+          className="relative z-10 w-full h-full cursor-crosshair"
         />
 
         {/* Overlays */}
         <AnimatePresence>
-          {status !== GameStatus.PLAYING && (
+          {status === GameStatus.LEVEL_UP && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 z-20 bg-black/60 backdrop-blur-md flex items-center justify-center"
+            >
+              <motion.div
+                initial={{ scale: 0.5, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className="text-center"
+              >
+                <div className="text-emerald-400 text-sm font-mono mb-2 uppercase tracking-[0.3em]">{t.nextLevel}</div>
+                <div className="text-7xl font-bold mb-6 glow-text">{t.level} {level}</div>
+                <div className="text-white/40 text-xs animate-pulse">{t.preparing}</div>
+              </motion.div>
+            </motion.div>
+          )}
+
+          {status !== GameStatus.PLAYING && status !== GameStatus.LEVEL_UP && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
