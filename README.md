@@ -1,11 +1,36 @@
-<div align="center">
+# Eric Nova Defense (Eric新星防御)
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+A high-performance, responsive Tower Defense game built with React, Tailwind CSS, and Vite.
 
-  <h1>Built with AI Studio</h2>
+## Features
 
-  <p>The fastest path from prompt to production with Gemini.</p>
+- **Classic Gameplay**: Protect your cities from falling rockets.
+- **Modern Tech Stack**: Built with React 19, Tailwind CSS 4, and Framer Motion.
+- **Responsive Design**: Playable on both Desktop and Mobile.
+- **Bilingual**: Supports English and Chinese.
+- **Shield System**: Cities and batteries have protective shields.
+- **Triple Shot**: The middle battery features a powerful triple-shot interceptor.
 
-  <a href="https://aistudio.google.com/apps">Start building</a>
+## Deployment
 
-</div>
+### Deploy to Vercel
+
+1. Push this code to a GitHub repository.
+2. Connect your GitHub repository to [Vercel](https://vercel.com).
+3. Vercel will automatically detect the Vite project and deploy it.
+4. (Optional) Add `GEMINI_API_KEY` to your Vercel Environment Variables if you plan to use AI features.
+
+### Local Development
+
+```bash
+npm install
+npm run dev
+```
+
+### Build for Production
+
+```bash
+npm run build
+```
+
+The output will be in the `dist` folder.
